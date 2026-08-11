@@ -15,6 +15,10 @@ The project models a real distributed-systems problem: execute independent steps
 - load scenario with configurable concurrency;
 - Docker Compose with NATS JetStream base;
 - PostgreSQL adapter with durable execution state and append-only event log;
+- Redis-backed distributed leases for worker ownership;
+- NATS JetStream event sink;
+- OpenTelemetry auto-instrumentation;
+- Kubernetes Deployment, Service and HPA templates;
 - strict TypeScript and automated tests.
 
 ## Run
@@ -45,4 +49,4 @@ TOTAL=2000 CONCURRENCY=100 npm run load
 
 ## Roadmap
 
-The next slices add Redis leases, NATS JetStream workers, heartbeat-based recovery, OpenTelemetry, Prometheus, Kubernetes deployment and a worker control plane. The demo uses memory storage when `DATABASE_URL` is absent; Compose switches to PostgreSQL and applies the migration on first database initialization.
+The demo uses memory storage when `DATABASE_URL` is absent; Compose switches to PostgreSQL and publishes workflow events to NATS. Kubernetes templates are in `k8s/` and expect PostgreSQL and NATS to be provided as platform services.

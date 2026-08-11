@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-api-config
+  namespace: workflows
+data:
+  PORT: "8080"
+  NATS_URL: nats://nats:4222
+  DATABASE_URL: postgresql://workflows:workflows@postgres:5432/workflows
