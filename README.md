@@ -17,6 +17,7 @@ The project models a real distributed-systems problem: execute independent steps
 - PostgreSQL adapter with durable execution state and append-only event log;
 - Redis-backed distributed leases for worker ownership;
 - NATS JetStream event sink;
+- NATS JetStream durable task queue with explicit ack/nak;
 - OpenTelemetry auto-instrumentation;
 - worker lease coordination with heartbeats;
 - Prometheus-compatible workflow counters at `/metrics`;
