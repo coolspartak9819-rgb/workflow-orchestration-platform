@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node --import tsx src/index.ts",
@@ -12,6 +14,15 @@
     "test": "node --import tsx --test test/**/*.test.ts",
     "load": "node --import tsx scripts/load.ts"
   },
-  "dependencies": { "fastify": "^5.2.1", "pino": "^9.6.0" },
-  "devDependencies": { "@types/node": "^22.13.4", "tsx": "^4.19.3", "typescript": "^5.7.3" }
+  "dependencies": {
+    "fastify": "^5.2.1",
+    "pg": "^8.23.0",
+    "pino": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/pg": "^8.21.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
 }

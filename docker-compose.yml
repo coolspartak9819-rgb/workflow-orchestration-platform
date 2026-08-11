@@ -6,8 +6,10 @@ services:
     environment:
       PORT: 8080
       NATS_URL: nats://nats:4222
+      DATABASE_URL: postgresql://workflows:workflows@postgres:5432/workflows
     depends_on:
       - nats
+      - postgres
     restart: unless-stopped
 
   nats:
@@ -17,3 +19,17 @@ services:
       - "4222:4222"
       - "8222:8222"
     restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: workflows
+      POSTGRES_PASSWORD: workflows
+      POSTGRES_DB: workflows
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations/001_workflows.sql:/docker-entrypoint-initdb.d/001_workflows.sql:ro
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

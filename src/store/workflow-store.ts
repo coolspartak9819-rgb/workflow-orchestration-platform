@@ -1,11 +1,12 @@
 import type { WorkflowEvent } from '../domain/events.js';
 import type { StartWorkflow, WorkflowExecution, WorkflowStatus } from '../domain/workflow.js';
+import type { WorkflowStore } from './workflow-store-port.js';
 
 export class IdempotencyConflict extends Error {
   constructor() { super('idempotency key was already used with another workflow definition'); }
 }
 
-export class MemoryWorkflowStore {
+export class MemoryWorkflowStore implements WorkflowStore {
   private readonly executions = new Map<string, WorkflowExecution>();
   private readonly idempotency = new Map<string, string>();
   private readonly events: WorkflowEvent[] = [];

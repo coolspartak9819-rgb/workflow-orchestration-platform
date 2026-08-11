@@ -1,13 +1,13 @@
 import type { EventSink, WorkflowEvent } from '../domain/events.js';
 import type { StartWorkflow, WorkflowExecution } from '../domain/workflow.js';
 import { isValidDefinition } from '../domain/workflow.js';
-import { MemoryWorkflowStore } from '../store/workflow-store.js';
+import type { WorkflowStore } from '../store/workflow-store-port.js';
 import { StepExecutor } from './executor.js';
 
 export class WorkflowOrchestrator {
   private readonly active = new Set<string>();
   constructor(
-    private readonly store: MemoryWorkflowStore,
+    private readonly store: WorkflowStore,
     private readonly executor: StepExecutor,
     private readonly sink: EventSink = async () => {},
   ) {}
