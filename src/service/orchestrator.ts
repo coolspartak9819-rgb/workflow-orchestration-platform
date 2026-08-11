@@ -46,6 +46,7 @@ export class WorkflowOrchestrator {
           return step;
         }));
         execution = (await this.store.get(id))!;
+        let hasFailure = false;
         for (let index = 0; index < results.length; index += 1) {
           const result = results[index]!;
           const step = ready[index]!;
@@ -54,14 +55,34 @@ export class WorkflowOrchestrator {
             const error = result.reason instanceof Error ? result.reason.message : 'step failed';
             execution = await this.store.update(id, (item) => { item.stepStates[step.id]!.status = 'failed'; item.stepStates[step.id]!.error = error; item.status = 'failed'; });
             await this.emit({ type: 'step.failed', executionId: id, stepId: step.id, occurredAt: new Date().toISOString(), payload: { error } }, execution);
+            hasFailure = true;
           }
         }
-        if (execution.status === 'failed') return execution;
+        if (hasFailure) return this.compensate(execution);
       }
       execution = await this.store.update(id, (item) => { item.status = 'completed'; });
       await this.emit({ type: 'workflow.completed', executionId: id, occurredAt: new Date().toISOString(), payload: {} }, execution);
       return execution;
     } finally { this.active.delete(id); }
+  }
+
+  private async compensate(execution: WorkflowExecution): Promise<WorkflowExecution> {
+    const completed = [...execution.definition.steps].reverse().filter((step) => execution.stepStates[step.id]!.status === 'completed' && step.compensation);
+    if (completed.length === 0) return execution;
+    execution = await this.store.update(execution.id, (item) => { item.status = 'compensating'; });
+    for (const step of completed) {
+      try {
+        const output = execution.stepStates[step.id]!.output;
+        await this.executor.runCompensation(step, { executionId: execution.id, tenantId: execution.tenantId, input: {}, outputs: { [step.id]: output } });
+        execution = await this.store.update(execution.id, (item) => { item.stepStates[step.id]!.status = 'compensated'; });
+        await this.emit({ type: 'step.compensated', executionId: execution.id, stepId: step.id, occurredAt: new Date().toISOString(), payload: {} }, execution);
+      } catch (error) {
+        return this.store.update(execution.id, (item) => { item.status = 'failed'; item.stepStates[step.id]!.error = error instanceof Error ? error.message : 'compensation failed'; });
+      }
+    }
+    execution = await this.store.update(execution.id, (item) => { item.status = 'compensated'; });
+    await this.emit({ type: 'workflow.compensated', executionId: execution.id, occurredAt: new Date().toISOString(), payload: {} }, execution);
+    return execution;
   }
 
   private async emit(event: Omit<WorkflowEvent, 'id'>, execution: WorkflowExecution): Promise<void> {

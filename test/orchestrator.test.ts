@@ -48,6 +48,26 @@ test('failed steps stop the workflow and expose an event trail', async () => {
   assert.equal((await service.events(execution.id)).some((event) => event.type === 'step.failed'), true);
 });
 
+test('failed workflow compensates completed steps in reverse order', async () => {
+  const order: string[] = [];
+  const executor = new StepExecutor()
+    .register('reserve-inventory', async () => { order.push('reserve'); return true; })
+    .register('release-inventory', async () => { order.push('release'); return true; })
+    .register('charge-payment', async () => { order.push('charge'); throw new Error('card declined'); });
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), executor);
+  const definitionWithCompensation = {
+    name: 'checkout', version: 1, steps: [
+      { id: 'reserve', name: 'reserve-inventory', dependsOn: [], retry: { maxAttempts: 1, backoffMs: 0 }, compensation: 'release-inventory' },
+      { id: 'charge', name: 'charge-payment', dependsOn: ['reserve'], retry: { maxAttempts: 1, backoffMs: 0 } },
+    ],
+  };
+  const execution = (await service.start({ tenantId: 'tenant-a', idempotencyKey: 'compensate', definition: definitionWithCompensation })).execution;
+  const result = await service.run(execution.id);
+  assert.equal(result.status, 'compensated');
+  assert.deepEqual(order, ['reserve', 'charge', 'release']);
+  assert.equal((await service.events(execution.id)).some((event) => event.type === 'workflow.compensated'), true);
+});
+
 test('HTTP API keeps workflow details tenant-scoped', async () => {
   const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor().register('reserve-inventory', async () => true));
   const app = buildApp(service);

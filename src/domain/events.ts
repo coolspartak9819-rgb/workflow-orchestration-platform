@@ -2,7 +2,7 @@ import type { WorkflowExecution } from './workflow.js';
 
 export type WorkflowEvent = {
   id: string;
-  type: 'workflow.queued' | 'workflow.started' | 'step.completed' | 'step.failed' | 'workflow.completed' | 'workflow.failed';
+  type: 'workflow.queued' | 'workflow.started' | 'step.completed' | 'step.failed' | 'step.compensated' | 'workflow.completed' | 'workflow.failed' | 'workflow.compensated';
   executionId: string;
   stepId?: string;
   occurredAt: string;

@@ -24,4 +24,11 @@ export class StepExecutor {
     }
     throw lastError instanceof Error ? lastError : new Error('step failed');
   }
+
+  async runCompensation(step: WorkflowStep, context: StepContext): Promise<unknown> {
+    if (!step.compensation) return undefined;
+    const handler = this.handlers.get(step.compensation);
+    if (!handler) throw new Error(`no compensation handler registered for step: ${step.compensation}`);
+    return handler(context);
+  }
 }

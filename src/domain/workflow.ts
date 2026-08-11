@@ -1,5 +1,5 @@
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'compensating' | 'compensated';
-export type WorkflowStatus = 'queued' | 'running' | 'completed' | 'failed' | 'compensated';
+export type WorkflowStatus = 'queued' | 'running' | 'completed' | 'failed' | 'compensating' | 'compensated';
 
 export type WorkflowStep = {
   id: string;
