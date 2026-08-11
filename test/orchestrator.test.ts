@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { buildApp } from '../src/http/app.js';
+import { StepExecutor } from '../src/service/executor.js';
+import { WorkflowOrchestrator } from '../src/service/orchestrator.js';
+import { MemoryWorkflowStore, IdempotencyConflict } from '../src/store/workflow-store.js';
+
+const definition = {
+  name: 'checkout', version: 1, steps: [
+    { id: 'reserve', name: 'reserve-inventory', dependsOn: [], retry: { maxAttempts: 2, backoffMs: 1 } },
+    { id: 'charge', name: 'charge-payment', dependsOn: ['reserve'], retry: { maxAttempts: 2, backoffMs: 1 } },
+  ],
+} as const;
+
+test('workflow runs DAG steps in dependency order', async () => {
+  const order: string[] = [];
+  const executor = new StepExecutor().register('reserve-inventory', async () => { order.push('reserve'); return 1; }).register('charge-payment', async () => { order.push('charge'); return 2; });
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), executor);
+  const execution = (await service.start({ tenantId: 'tenant-a', idempotencyKey: 'checkout-1', definition })).execution;
+  const result = await service.run(execution.id);
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(order, ['reserve', 'charge']);
+  assert.equal((await service.events(execution.id)).length, 5);
+});
+
+test('same idempotency key does not create a second execution', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor().register('reserve-inventory', async () => true));
+  const first = await service.start({ tenantId: 'tenant-a', idempotencyKey: 'same', definition: { ...definition, steps: [definition.steps[0]] } });
+  const second = await service.start({ tenantId: 'tenant-a', idempotencyKey: 'same', definition: { ...definition, steps: [definition.steps[0]] } });
+  assert.equal(first.execution.id, second.execution.id);
+  assert.equal(second.duplicate, true);
+});
+
+test('cyclic workflows are rejected', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor());
+  await assert.rejects(() => service.start({ tenantId: 'tenant-a', idempotencyKey: 'cycle', definition: { name: 'bad', version: 1, steps: [
+    { id: 'a', name: 'a', dependsOn: ['b'], retry: { maxAttempts: 1, backoffMs: 0 } },
+    { id: 'b', name: 'b', dependsOn: ['a'], retry: { maxAttempts: 1, backoffMs: 0 } },
+  ] } }), /acyclic/);
+});
+
+test('failed steps stop the workflow and expose an event trail', async () => {
+  const executor = new StepExecutor().register('reserve-inventory', async () => { throw new Error('sold out'); });
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), executor);
+  const execution = (await service.start({ tenantId: 'tenant-a', idempotencyKey: 'failed', definition: { ...definition, steps: [definition.steps[0]] } })).execution;
+  const result = await service.run(execution.id);
+  assert.equal(result.status, 'failed');
+  assert.equal((await service.events(execution.id)).some((event) => event.type === 'step.failed'), true);
+});
+
+test('HTTP API keeps workflow details tenant-scoped', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor().register('reserve-inventory', async () => true));
+  const app = buildApp(service);
+  const response = await app.inject({ method: 'POST', url: '/v1/workflows', headers: { 'x-tenant-id': 'a', 'idempotency-key': 'x' }, payload: { definition: { ...definition, steps: [definition.steps[0]] } } });
+  const id = response.json().id;
+  const forbidden = await app.inject({ method: 'GET', url: `/v1/workflows/${id}`, headers: { 'x-tenant-id': 'b' } });
+  assert.equal(forbidden.statusCode, 404);
+  await app.close();
+});
+
+test('conflicting idempotency payload is rejected', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor());
+  await service.start({ tenantId: 'tenant-a', idempotencyKey: 'conflict', definition });
+  await assert.rejects(() => service.start({ tenantId: 'tenant-a', idempotencyKey: 'conflict', definition: { ...definition, name: 'different' } }), IdempotencyConflict);
+});
