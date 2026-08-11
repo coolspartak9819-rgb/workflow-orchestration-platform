@@ -4,6 +4,7 @@ import { buildApp } from '../src/http/app.js';
 import { StepExecutor } from '../src/service/executor.js';
 import { WorkflowOrchestrator } from '../src/service/orchestrator.js';
 import { MemoryWorkflowStore, IdempotencyConflict } from '../src/store/workflow-store.js';
+import { WorkflowWorker } from '../src/service/worker.js';
 
 const definition = {
   name: 'checkout', version: 1, steps: [
@@ -82,4 +83,20 @@ test('conflicting idempotency payload is rejected', async () => {
   const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor());
   await service.start({ tenantId: 'tenant-a', idempotencyKey: 'conflict', definition });
   await assert.rejects(() => service.start({ tenantId: 'tenant-a', idempotencyKey: 'conflict', definition: { ...definition, name: 'different' } }), IdempotencyConflict);
+});
+
+test('worker lease allows only one worker to process an execution', async () => {
+  const owners = new Set<string>();
+  const lease = {
+    async acquire(key: string, owner: string) { if (owners.has(key)) return false; owners.add(key); return true; },
+    async renew() { return true; },
+    async release(key: string) { owners.delete(key); },
+  };
+  const worker = new WorkflowWorker(lease, 1_000);
+  let runs = 0;
+  const first = worker.process('wf-1', 'worker-a', async () => { runs += 1; await new Promise((resolve) => setTimeout(resolve, 5)); });
+  const second = worker.process('wf-1', 'worker-b', async () => { runs += 1; });
+  assert.equal(await second, false);
+  assert.equal(await first, true);
+  assert.equal(runs, 1);
 });

@@ -1,6 +1,12 @@
 import type { Redis } from 'ioredis';
 
-export class RedisLease {
+export interface LeaseProvider {
+  acquire(key: string, owner: string): Promise<boolean>;
+  renew(key: string, owner: string): Promise<boolean>;
+  release(key: string, owner: string): Promise<void>;
+}
+
+export class RedisLease implements LeaseProvider {
   constructor(private readonly redis: Redis, private readonly ttlMs = 30_000) {}
 
   async acquire(key: string, owner: string): Promise<boolean> {

@@ -6,6 +6,7 @@ import { StepExecutor } from './executor.js';
 
 export class WorkflowOrchestrator {
   private readonly active = new Set<string>();
+  private readonly metrics = { queued: 0, started: 0, completed: 0, failed: 0, compensated: 0 };
   constructor(
     private readonly store: WorkflowStore,
     private readonly executor: StepExecutor,
@@ -16,6 +17,7 @@ export class WorkflowOrchestrator {
     if (!isValidDefinition(input.definition)) throw new Error('workflow definition must be a non-empty acyclic graph');
     const result = await this.store.create(input);
     if (!result.duplicate) {
+      this.metrics.queued += 1;
       await this.emit({ type: 'workflow.queued', executionId: result.execution.id, occurredAt: new Date().toISOString(), payload: {} }, result.execution);
     }
     return result;
@@ -24,12 +26,14 @@ export class WorkflowOrchestrator {
   get(id: string): Promise<WorkflowExecution | undefined> { return this.store.get(id); }
   list(query: { tenantId: string; status?: WorkflowExecution['status']; limit?: number }): Promise<WorkflowExecution[]> { return this.store.list(query); }
   events(id: string) { return this.store.listEvents(id); }
+  getMetrics() { return { ...this.metrics }; }
 
   async run(id: string): Promise<WorkflowExecution> {
     if (this.active.has(id)) return (await this.store.get(id))!;
     this.active.add(id);
     try {
       let execution = await this.store.update(id, (item) => { item.status = 'running'; });
+      this.metrics.started += 1;
       await this.emit({ type: 'workflow.started', executionId: id, occurredAt: new Date().toISOString(), payload: {} }, execution);
       while (true) {
         const ready = execution.definition.steps.filter((step) => {
@@ -58,9 +62,14 @@ export class WorkflowOrchestrator {
             hasFailure = true;
           }
         }
-        if (hasFailure) return this.compensate(execution);
+        if (hasFailure) {
+          const result = await this.compensate(execution);
+          if (result.status === 'compensated') this.metrics.compensated += 1; else this.metrics.failed += 1;
+          return result;
+        }
       }
       execution = await this.store.update(id, (item) => { item.status = 'completed'; });
+      this.metrics.completed += 1;
       await this.emit({ type: 'workflow.completed', executionId: id, occurredAt: new Date().toISOString(), payload: {} }, execution);
       return execution;
     } finally { this.active.delete(id); }

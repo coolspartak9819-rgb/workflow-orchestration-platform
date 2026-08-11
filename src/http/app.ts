@@ -6,6 +6,10 @@ import { WorkflowOrchestrator } from '../service/orchestrator.js';
 export function buildApp(orchestrator: WorkflowOrchestrator) {
   const app = Fastify({ logger: true });
   app.get('/healthz', async () => ({ status: 'ok' }));
+  app.get('/metrics', async (_request, reply) => {
+    const metrics = orchestrator.getMetrics();
+    return reply.type('text/plain').send(`${Object.entries(metrics).map(([name, value]) => `workflow_${name}_total ${value}`).join('\n')}\n`);
+  });
   app.post<{ Headers: { 'x-tenant-id'?: string; 'idempotency-key'?: string }; Body: { definition?: unknown } }>('/v1/workflows', async (request, reply) => {
     const tenantId = request.headers['x-tenant-id'];
     const idempotencyKey = request.headers['idempotency-key'];

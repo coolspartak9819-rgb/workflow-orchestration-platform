@@ -18,6 +18,8 @@ The project models a real distributed-systems problem: execute independent steps
 - Redis-backed distributed leases for worker ownership;
 - NATS JetStream event sink;
 - OpenTelemetry auto-instrumentation;
+- worker lease coordination with heartbeats;
+- Prometheus-compatible workflow counters at `/metrics`;
 - Kubernetes Deployment, Service and HPA templates;
 - strict TypeScript and automated tests.
 
