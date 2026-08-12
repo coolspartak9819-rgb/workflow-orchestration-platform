@@ -27,6 +27,7 @@ The project models a real distributed-systems problem: execute independent steps
 - Prometheus-compatible workflow counters at `/metrics`;
 - optional tenant-scoped API-key authentication;
 - Kubernetes Deployment, Service and HPA templates;
+- Kubernetes worker Deployment with replica-safe task consumption;
 - strict TypeScript and automated tests.
 
 ## Run

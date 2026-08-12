@@ -6,6 +6,7 @@ import { WorkflowOrchestrator } from '../src/service/orchestrator.js';
 import { MemoryWorkflowStore, IdempotencyConflict } from '../src/store/workflow-store.js';
 import { WorkflowWorker } from '../src/service/worker.js';
 import { TenantAuthenticator } from '../src/http/auth.js';
+import { WorkflowRecovery } from '../src/service/recovery.js';
 
 const definition = {
   name: 'checkout', version: 1, steps: [
@@ -133,4 +134,15 @@ test('configured API keys enforce tenant ownership', async () => {
   const accepted = await app.inject({ method: 'GET', url: '/v1/workflows', headers: { 'x-tenant-id': 'tenant-a', 'x-api-key': 'key-a' } });
   assert.equal(accepted.statusCode, 200);
   await app.close();
+});
+
+test('recovery redispatches stale queued and running workflows', async () => {
+  const store = new MemoryWorkflowStore();
+  const service = new WorkflowOrchestrator(store, new StepExecutor());
+  const execution = (await service.start({ tenantId: 'tenant-a', idempotencyKey: 'stale', definition: { ...definition, steps: [definition.steps[0]] } })).execution;
+  await store.update(execution.id, (item) => { item.status = 'running'; });
+  const dispatched: string[] = [];
+  const recovery = new WorkflowRecovery(store, { async dispatch(task) { dispatched.push(task.executionId); } }, 100, () => Date.now() + 10_000);
+  assert.equal(await recovery.recover(), 1);
+  assert.deepEqual(dispatched, [execution.id]);
 });
