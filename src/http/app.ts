@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import type { WorkflowStatus } from '../domain/workflow.js';
+import { parseWorkflowDefinition, type WorkflowStatus } from '../domain/workflow.js';
 import { IdempotencyConflict } from '../store/workflow-store.js';
 import { WorkflowOrchestrator } from '../service/orchestrator.js';
 
@@ -14,8 +14,10 @@ export function buildApp(orchestrator: WorkflowOrchestrator) {
     const tenantId = request.headers['x-tenant-id'];
     const idempotencyKey = request.headers['idempotency-key'];
     if (!tenantId || !idempotencyKey || !request.body?.definition) return reply.code(400).send({ error: 'x-tenant-id, idempotency-key and definition are required' });
+    const parsed = parseWorkflowDefinition(request.body.definition);
+    if (!parsed.valid) return reply.code(422).send({ error: parsed.error });
     try {
-      const result = await orchestrator.start({ tenantId, idempotencyKey, definition: request.body.definition as never });
+      const result = await orchestrator.start({ tenantId, idempotencyKey, definition: parsed.definition });
       if (!result.duplicate) void orchestrator.run(result.execution.id);
       return reply.code(result.duplicate ? 200 : 202).send(result.execution);
     } catch (error) {

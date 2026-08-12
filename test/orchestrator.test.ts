@@ -100,3 +100,24 @@ test('worker lease allows only one worker to process an execution', async () => 
   assert.equal(await first, true);
   assert.equal(runs, 1);
 });
+
+test('HTTP API rejects malformed workflow definitions with field errors', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor());
+  const app = buildApp(service);
+  const response = await app.inject({ method: 'POST', url: '/v1/workflows', headers: { 'x-tenant-id': 'tenant-a', 'idempotency-key': 'bad' }, payload: { definition: { name: 'broken', version: 1, steps: [{ id: 'a', name: 'task', dependsOn: [], retry: { maxAttempts: 0, backoffMs: -1 } }] } } });
+  assert.equal(response.statusCode, 422);
+  assert.match(response.json().error, /retry/);
+  await app.close();
+});
+
+test('HTTP API rejects cyclic JSON definitions before orchestration', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor());
+  const app = buildApp(service);
+  const response = await app.inject({ method: 'POST', url: '/v1/workflows', headers: { 'x-tenant-id': 'tenant-a', 'idempotency-key': 'cycle-api' }, payload: { definition: { name: 'cycle', version: 1, steps: [
+    { id: 'a', name: 'task', dependsOn: ['b'], retry: { maxAttempts: 1, backoffMs: 0 } },
+    { id: 'b', name: 'task', dependsOn: ['a'], retry: { maxAttempts: 1, backoffMs: 0 } },
+  ] } } });
+  assert.equal(response.statusCode, 422);
+  assert.match(response.json().error, /acyclic/);
+  await app.close();
+});
