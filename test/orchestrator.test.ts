@@ -5,6 +5,7 @@ import { StepExecutor } from '../src/service/executor.js';
 import { WorkflowOrchestrator } from '../src/service/orchestrator.js';
 import { MemoryWorkflowStore, IdempotencyConflict } from '../src/store/workflow-store.js';
 import { WorkflowWorker } from '../src/service/worker.js';
+import { TenantAuthenticator } from '../src/http/auth.js';
 
 const definition = {
   name: 'checkout', version: 1, steps: [
@@ -119,5 +120,17 @@ test('HTTP API rejects cyclic JSON definitions before orchestration', async () =
   ] } } });
   assert.equal(response.statusCode, 422);
   assert.match(response.json().error, /acyclic/);
+  await app.close();
+});
+
+test('configured API keys enforce tenant ownership', async () => {
+  const service = new WorkflowOrchestrator(new MemoryWorkflowStore(), new StepExecutor());
+  const app = buildApp(service, new TenantAuthenticator('key-a:tenant-a'));
+  const missing = await app.inject({ method: 'GET', url: '/v1/workflows', headers: { 'x-tenant-id': 'tenant-a' } });
+  assert.equal(missing.statusCode, 401);
+  const wrongTenant = await app.inject({ method: 'GET', url: '/v1/workflows', headers: { 'x-tenant-id': 'tenant-b', 'x-api-key': 'key-a' } });
+  assert.equal(wrongTenant.statusCode, 401);
+  const accepted = await app.inject({ method: 'GET', url: '/v1/workflows', headers: { 'x-tenant-id': 'tenant-a', 'x-api-key': 'key-a' } });
+  assert.equal(accepted.statusCode, 200);
   await app.close();
 });

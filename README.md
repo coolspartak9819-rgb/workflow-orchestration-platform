@@ -21,6 +21,7 @@ The project models a real distributed-systems problem: execute independent steps
 - OpenTelemetry auto-instrumentation;
 - worker lease coordination with heartbeats;
 - Prometheus-compatible workflow counters at `/metrics`;
+- optional tenant-scoped API-key authentication;
 - Kubernetes Deployment, Service and HPA templates;
 - strict TypeScript and automated tests.
 
@@ -53,3 +54,7 @@ TOTAL=2000 CONCURRENCY=100 npm run load
 ## Roadmap
 
 The demo uses memory storage when `DATABASE_URL` is absent; Compose switches to PostgreSQL and publishes workflow events to NATS. Kubernetes templates are in `k8s/` and expect PostgreSQL and NATS to be provided as platform services.
+
+For a protected deployment set `API_KEYS` to comma-separated `key:tenant` pairs.
+Requests to `/v1/*` must include both `X-API-Key` and `X-Tenant-ID`; requests without
+configured keys keep the local development behaviour.

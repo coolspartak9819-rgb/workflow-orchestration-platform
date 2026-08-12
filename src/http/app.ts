@@ -2,9 +2,17 @@ import Fastify from 'fastify';
 import { parseWorkflowDefinition, type WorkflowStatus } from '../domain/workflow.js';
 import { IdempotencyConflict } from '../store/workflow-store.js';
 import { WorkflowOrchestrator } from '../service/orchestrator.js';
+import { TenantAuthenticator } from './auth.js';
 
-export function buildApp(orchestrator: WorkflowOrchestrator) {
+export function buildApp(orchestrator: WorkflowOrchestrator, authenticator = new TenantAuthenticator()) {
   const app = Fastify({ logger: true });
+  app.addHook('onRequest', async (request, reply) => {
+    if (!request.url.startsWith('/v1/')) return;
+    const tenantId = typeof request.headers['x-tenant-id'] === 'string' ? request.headers['x-tenant-id'] : undefined;
+    const apiKey = typeof request.headers['x-api-key'] === 'string' ? request.headers['x-api-key'] : undefined;
+    if (!authenticator.authenticate(apiKey, tenantId)) return reply.code(401).send({ error: 'valid x-api-key and x-tenant-id are required' });
+    request.headers['x-request-id'] = request.id;
+  });
   app.get('/healthz', async () => ({ status: 'ok' }));
   app.get('/metrics', async (_request, reply) => {
     const metrics = orchestrator.getMetrics();
