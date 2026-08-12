@@ -3,6 +3,7 @@ import type { StartWorkflow, WorkflowExecution } from '../domain/workflow.js';
 import { isValidDefinition } from '../domain/workflow.js';
 import type { WorkflowStore } from '../store/workflow-store-port.js';
 import { StepExecutor } from './executor.js';
+import type { TaskDispatcher } from './task-dispatcher.js';
 
 export class WorkflowOrchestrator {
   private readonly active = new Set<string>();
@@ -11,6 +12,7 @@ export class WorkflowOrchestrator {
     private readonly store: WorkflowStore,
     private readonly executor: StepExecutor,
     private readonly sink: EventSink = async () => {},
+    private readonly dispatcher?: TaskDispatcher,
   ) {}
 
   async start(input: StartWorkflow): Promise<{ execution: WorkflowExecution; duplicate: boolean }> {
@@ -21,6 +23,12 @@ export class WorkflowOrchestrator {
       await this.emit({ type: 'workflow.queued', executionId: result.execution.id, occurredAt: new Date().toISOString(), payload: {} }, result.execution);
     }
     return result;
+  }
+
+  usesDispatcher(): boolean { return Boolean(this.dispatcher); }
+  async dispatch(execution: WorkflowExecution): Promise<void> {
+    if (!this.dispatcher) throw new Error('workflow dispatcher is not configured');
+    await this.dispatcher.dispatch({ executionId: execution.id, tenantId: execution.tenantId });
   }
 
   get(id: string): Promise<WorkflowExecution | undefined> { return this.store.get(id); }

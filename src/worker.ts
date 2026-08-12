@@ -1,0 +1,32 @@
+import './telemetry.js';
+import { connect } from '@nats-io/transport-node';
+import { NatsTaskQueue } from './infra/nats-task-queue.js';
+import { StepExecutor } from './service/executor.js';
+import { WorkflowOrchestrator } from './service/orchestrator.js';
+import { PostgresWorkflowStore } from './store/postgres-workflow-store.js';
+import { Pool } from 'pg';
+import { Redis } from 'ioredis';
+import { RedisLease } from './infra/redis-lease.js';
+import { WorkflowWorker } from './service/worker.js';
+import { WorkflowRecovery } from './service/recovery.js';
+
+const connection = await connect({ servers: process.env.NATS_URL ?? 'nats://127.0.0.1:4222' });
+const queue = new NatsTaskQueue(connection);
+await queue.ensure();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL ?? 'postgresql://workflows:workflows@127.0.0.1:5432/workflows' });
+const store = new PostgresWorkflowStore(pool);
+const executor = new StepExecutor().register('reserve-inventory', async () => ({ reserved: true })).register('charge-payment', async () => ({ charged: true })).register('send-confirmation', async () => ({ sent: true }));
+const orchestrator = new WorkflowOrchestrator(store, executor);
+const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+const lease = new RedisLease(redis);
+const worker = new WorkflowWorker(lease);
+const recovery = new WorkflowRecovery(store, queue, Number(process.env.RECOVERY_STALE_MS ?? 60_000));
+const recoveryTimer = setInterval(() => { void recovery.recover(); }, Number(process.env.RECOVERY_INTERVAL_MS ?? 15_000));
+await queue.consume(process.env.WORKER_ID ?? `worker-${process.pid}`, async (task) => {
+  const execution = await orchestrator.get(task.executionId);
+  if (execution && execution.tenantId === task.tenantId) await worker.process(task.executionId, process.env.WORKER_ID ?? `worker-${process.pid}`, () => orchestrator.run(task.executionId).then(() => undefined));
+});
+clearInterval(recoveryTimer);
+await redis.quit();
+await pool.end();
+await connection.drain();

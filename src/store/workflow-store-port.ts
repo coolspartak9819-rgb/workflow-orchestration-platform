@@ -7,5 +7,5 @@ export interface WorkflowStore {
   update(id: string, change: (execution: WorkflowExecution) => void): Promise<WorkflowExecution>;
   appendEvent(event: WorkflowEvent): Promise<void>;
   listEvents(executionId: string): Promise<WorkflowEvent[]>;
-  list(query: { tenantId: string; status?: WorkflowStatus; limit?: number }): Promise<WorkflowExecution[]>;
+  list(query: { tenantId?: string; status?: WorkflowStatus; limit?: number }): Promise<WorkflowExecution[]>;
 }

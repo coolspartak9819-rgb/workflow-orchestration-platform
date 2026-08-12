@@ -7,9 +7,25 @@ services:
       PORT: 8080
       NATS_URL: nats://nats:4222
       DATABASE_URL: postgresql://workflows:workflows@postgres:5432/workflows
+      REDIS_URL: redis://redis:6379
     depends_on:
       - nats
       - postgres
+      - redis
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    environment:
+      NATS_URL: nats://nats:4222
+      DATABASE_URL: postgresql://workflows:workflows@postgres:5432/workflows
+      REDIS_URL: redis://redis:6379
+      WORKER_ID: worker-1
+    depends_on:
+      - nats
+      - postgres
+      - redis
     restart: unless-stopped
 
   nats:
@@ -29,6 +45,10 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./migrations/001_workflows.sql:/docker-entrypoint-initdb.d/001_workflows.sql:ro
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
     restart: unless-stopped
 
 volumes:

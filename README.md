@@ -13,6 +13,10 @@ The project models a real distributed-systems problem: execute independent steps
 - workflow and step event trail;
 - tenant-scoped idempotency;
 - load scenario with configurable concurrency;
+- separate NATS worker process with Redis lease protection;
+- stale execution recovery loop;
+- repeatable SQL migration command;
+- GitHub Actions CI for tests, typecheck, build and container image;
 - Docker Compose with NATS JetStream base;
 - PostgreSQL adapter with durable execution state and append-only event log;
 - Redis-backed distributed leases for worker ownership;
@@ -54,6 +58,10 @@ TOTAL=2000 CONCURRENCY=100 npm run load
 ## Roadmap
 
 The demo uses memory storage when `DATABASE_URL` is absent; Compose switches to PostgreSQL and publishes workflow events to NATS. Kubernetes templates are in `k8s/` and expect PostgreSQL and NATS to be provided as platform services.
+
+Run the distributed worker with `npm run worker`. It consumes durable NATS tasks,
+uses Redis leases to prevent duplicate execution and periodically recovers stale
+workflow executions. Apply the PostgreSQL schema with `DATABASE_URL=... npm run migrate`.
 
 For a protected deployment set `API_KEYS` to comma-separated `key:tenant` pairs.
 Requests to `/v1/*` must include both `X-API-Key` and `X-Tenant-ID`; requests without

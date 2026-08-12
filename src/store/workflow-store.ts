@@ -50,10 +50,10 @@ export class MemoryWorkflowStore implements WorkflowStore {
     return this.events.filter((event) => event.executionId === executionId);
   }
 
-  async list(query: { tenantId: string; status?: WorkflowStatus; limit?: number }): Promise<WorkflowExecution[]> {
+  async list(query: { tenantId?: string; status?: WorkflowStatus; limit?: number }): Promise<WorkflowExecution[]> {
     const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
     return [...this.executions.values()]
-      .filter((execution) => execution.tenantId === query.tenantId && (!query.status || execution.status === query.status))
+      .filter((execution) => (!query.tenantId || query.tenantId === '*' || execution.tenantId === query.tenantId) && (!query.status || execution.status === query.status))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit);
   }

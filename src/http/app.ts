@@ -26,7 +26,10 @@ export function buildApp(orchestrator: WorkflowOrchestrator, authenticator = new
     if (!parsed.valid) return reply.code(422).send({ error: parsed.error });
     try {
       const result = await orchestrator.start({ tenantId, idempotencyKey, definition: parsed.definition });
-      if (!result.duplicate) void orchestrator.run(result.execution.id);
+      if (!result.duplicate) {
+        if (orchestrator.usesDispatcher()) await orchestrator.dispatch(result.execution);
+        else void orchestrator.run(result.execution.id);
+      }
       return reply.code(result.duplicate ? 200 : 202).send(result.execution);
     } catch (error) {
       if (error instanceof IdempotencyConflict) return reply.code(409).send({ error: error.message });

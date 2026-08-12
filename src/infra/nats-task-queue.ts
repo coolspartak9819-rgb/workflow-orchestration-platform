@@ -1,10 +1,11 @@
 import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import type { JetStreamClient } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
+import type { TaskDispatcher } from '../service/task-dispatcher.js';
 
 export type WorkflowTask = { executionId: string; tenantId: string };
 
-export class NatsTaskQueue {
+export class NatsTaskQueue implements TaskDispatcher {
   private readonly client: JetStreamClient;
   constructor(private readonly connection: NatsConnection, private readonly stream = 'WORKFLOW_TASKS', private readonly subject = 'workflows.tasks') {
     this.client = jetstream(connection);
@@ -17,6 +18,7 @@ export class NatsTaskQueue {
   }
 
   async publish(task: WorkflowTask): Promise<void> { await this.client.publish(this.subject, new TextEncoder().encode(JSON.stringify(task))); }
+  async dispatch(task: WorkflowTask): Promise<void> { await this.publish(task); }
 
   async consume(consumerName: string, handler: (task: WorkflowTask) => Promise<void>): Promise<void> {
     const manager = await jetstreamManager(this.connection);

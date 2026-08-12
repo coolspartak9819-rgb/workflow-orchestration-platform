@@ -36,9 +36,9 @@ export class PostgresWorkflowStore implements WorkflowStore {
 
   async appendEvent(event: WorkflowEvent): Promise<void> { await this.pool.query('INSERT INTO workflow_events (id,type,execution_id,step_id,occurred_at,payload) VALUES ($1,$2,$3,$4,$5,$6)', [event.id, event.type, event.executionId, event.stepId ?? null, event.occurredAt, event.payload]); }
   async listEvents(executionId: string): Promise<WorkflowEvent[]> { const result = await this.pool.query<EventRow>('SELECT * FROM workflow_events WHERE execution_id=$1 ORDER BY occurred_at ASC', [executionId]); return result.rows.map(mapEvent); }
-  async list(query: { tenantId: string; status?: WorkflowExecution['status']; limit?: number }): Promise<WorkflowExecution[]> {
+  async list(query: { tenantId?: string; status?: WorkflowExecution['status']; limit?: number }): Promise<WorkflowExecution[]> {
     const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
-    const result = query.status ? await this.pool.query<ExecutionRow>('SELECT * FROM workflow_executions WHERE tenant_id=$1 AND status=$2 ORDER BY created_at DESC LIMIT $3', [query.tenantId, query.status, limit]) : await this.pool.query<ExecutionRow>('SELECT * FROM workflow_executions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2', [query.tenantId, limit]);
+    const result = query.tenantId === undefined || query.tenantId === '*' ? (query.status ? await this.pool.query<ExecutionRow>('SELECT * FROM workflow_executions WHERE status=$1 ORDER BY created_at DESC LIMIT $2', [query.status, limit]) : await this.pool.query<ExecutionRow>('SELECT * FROM workflow_executions ORDER BY created_at DESC LIMIT $1', [limit])) : (query.status ? await this.pool.query<ExecutionRow>('SELECT * FROM workflow_executions WHERE tenant_id=$1 AND status=$2 ORDER BY created_at DESC LIMIT $3', [query.tenantId, query.status, limit]) : await this.pool.query<ExecutionRow>('SELECT * FROM workflow_executions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT $2', [query.tenantId, limit]));
     return result.rows.map(mapExecution);
   }
 }
